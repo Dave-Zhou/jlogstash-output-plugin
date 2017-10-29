@@ -1,13 +1,9 @@
-package com.dtstack.jlogstash.output;
+package com.tansun.jlogstash.output;
 
 import java.io.IOException;
 import java.util.Map;
 
-import com.dtstack.jlogstash.outputs.Elasticsearch5;
-import com.dtstack.jlogstash.render.Formatter;
-import com.dtstack.jlogstash.render.FreeMarkerRender;
-import com.dtstack.jlogstash.render.TemplateRender;
-import com.google.common.collect.Lists;
+import com.tansun.jlogstash.render.Formatter;
 import com.google.common.collect.Maps;
 
 public class Test {
