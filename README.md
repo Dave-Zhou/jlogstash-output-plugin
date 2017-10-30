@@ -43,7 +43,11 @@
 
       consistency:false 数据一致性的开关，默认关闭；打开之后，在elasticsearch 集群不可用的情况下，数据会不断重试，不会再消费input数据，直到elasticsearch集群可用
 
-
+      numberOfShards:默认 5 最大分片数
+      
+      numberOfReplicas:默认 1 最大副本数
+      
+      totalFields:默认 1000 最大字段数
 # Kafka:
 
     encoding:默认utf-8
