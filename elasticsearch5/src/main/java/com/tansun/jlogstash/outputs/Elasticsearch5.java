@@ -17,6 +17,9 @@
  */
 package com.tansun.jlogstash.outputs;
 
+import com.tansun.jlogstash.annotation.Required;
+import com.tansun.jlogstash.render.Formatter;
+
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
@@ -25,12 +28,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-//import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.lang3.StringUtils;
 import org.elasticsearch.action.ActionFuture;
 import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.admin.cluster.health.ClusterHealthResponse;
+import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
+import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsResponse;
 import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkProcessor;
 import org.elasticsearch.action.bulk.BulkRequest;
@@ -49,148 +53,157 @@ import org.elasticsearch.transport.client.PreBuiltTransportClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.tansun.jlogstash.annotation.Required;
-import com.tansun.jlogstash.render.Formatter;
+//import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
- * 
  * Reason: TODO ADD REASON(可选)
  * Date: 2016年11月24日 下午1:35:21
  * Company: www.tansun.com
- * @author sishu.yss
  *
+ * @author sishu.yss
  */
 @SuppressWarnings("serial")
 public class Elasticsearch5 extends BaseOutput {
-    private static final Logger logger = LoggerFactory.getLogger(Elasticsearch5.class);
-    
-    @Required(required=true)
-    public static String index;
-    
-    public static String indexTimezone =null;
 
-    public static String documentId;
-    
-    public static String documentType = "logs";
-    
-    public static String cluster;
-    
-    @Required(required=true)
-    public static List<String> hosts;
-    
-    private static boolean sniff=true;
-    
-    private static int bulkActions = 20000; 
-    
-    private static int bulkSize = 15;
-    
-    private static int  flushInterval = 5;//seconds
-    
-    private static int	concurrentRequests = 1;
-        
-    private BulkProcessor bulkProcessor;
-    
-    private TransportClient esclient;
-    
+  private static final Logger logger = LoggerFactory.getLogger(Elasticsearch5.class);
+
+  @Required(required = true)
+  public static String index;
+
+  public static String indexTimezone = null;
+
+  public static String documentId;
+
+  public static String documentType = "logs";
+
+  public static String cluster;
+
+  @Required(required = true)
+  public static List<String> hosts;
+
+  private static boolean sniff = true;
+
+  private static int bulkActions = 20000;
+
+  private static int bulkSize = 15;
+
+  private static int flushInterval = 5;//seconds
+
+  private static int concurrentRequests = 1;
+
+  private BulkProcessor bulkProcessor;
+
+  private TransportClient esclient;
+
+  private static int numberOfShards = 5;
+
+  private static int numberOfReplicas = 1;
+
+  private static int totalFields = 1000;
+
 //    private AtomicLong sendReqs = new AtomicLong(0);
 //    
 //    private AtomicLong ackReqs = new AtomicLong(0);
 //   
 //    private int maxLag = bulkActions;
-    
+
 //    private AtomicLong needDelayTime = new AtomicLong(0l);
-    
-    private AtomicBoolean isClusterOn = new AtomicBoolean(true);
-    
-    private ExecutorService executor;
-    
-    @SuppressWarnings("rawtypes")
-	public Elasticsearch5(Map config) {
-        super(config);
+
+  private AtomicBoolean isClusterOn = new AtomicBoolean(true);
+
+  private ExecutorService executor;
+
+  @SuppressWarnings("rawtypes")
+  public Elasticsearch5(Map config) {
+    super(config);
+  }
+
+  public void prepare() {
+    try {
+      executor = Executors.newSingleThreadExecutor();
+      this.initESClient();
+    } catch (Exception e) {
+      logger.error(e.getMessage());
+      System.exit(1);
     }
+  }
 
-    public void prepare() {
-    	try {
-    		executor = Executors.newSingleThreadExecutor();
-             this.initESClient();
-            } catch (Exception e) {
-                logger.error(e.getMessage());
-                System.exit(1);
-            }
+
+  private void initESClient() throws NumberFormatException,
+      UnknownHostException {
+
+    Builder builder = Settings.builder().put("client.transport.sniff", sniff);
+    if (StringUtils.isNotBlank(cluster)) {
+      builder.put("cluster.name", cluster);
     }
+    Settings settings = builder.build();
+    esclient = new PreBuiltTransportClient(settings);
+    InetSocketTransportAddress[] addresss = new InetSocketTransportAddress[hosts.size()];
+    for (int i = 0; i < hosts.size(); i++) {
+      String host = hosts.get(i);
+      String[] hp = host.split(":");
+      String h = null, p = null;
+      if (hp.length == 2) {
+        h = hp[0];
+        p = hp[1];
+      } else if (hp.length == 1) {
+        h = hp[0];
+        p = "9300";
+      }
+      addresss[i] = new InetSocketTransportAddress(
+          InetAddress.getByName(h), Integer.parseInt(p));
+    }
+    esclient.addTransportAddresses(addresss);
+    executor.submit(new ClusterMonitor(esclient));
+    bulkProcessor = BulkProcessor
+        .builder(esclient, new BulkProcessor.Listener() {
 
+          @Override
+          public void afterBulk(long arg0, BulkRequest arg1,
+              BulkResponse arg2) {
 
-    private void initESClient() throws NumberFormatException,
-            UnknownHostException {
-    	    	
-        Builder builder  =Settings.builder().put("client.transport.sniff", sniff);  
-        if(StringUtils.isNotBlank(cluster)){
-        	builder.put("cluster.name", cluster);
-        }
-        Settings settings = builder.build();
-        esclient = new PreBuiltTransportClient(settings);
-        InetSocketTransportAddress[] addresss = new InetSocketTransportAddress[hosts.size()];
-        for (int i=0;i<hosts.size();i++) {
-        	String host = hosts.get(i);
-            String[] hp = host.split(":");
-            String h = null, p = null;
-            if (hp.length == 2) {
-                h = hp[0];
-                p = hp[1];
-            } else if (hp.length == 1) {
-                h = hp[0];
-                p = "9300";
-            }
-            addresss[i] = new InetSocketTransportAddress(
-                    InetAddress.getByName(h), Integer.parseInt(p));
-        }
-        esclient.addTransportAddresses(addresss);
-        executor.submit(new ClusterMonitor(esclient));
-        bulkProcessor = BulkProcessor
-                .builder(esclient, new BulkProcessor.Listener() {
-
-                    @Override
-                    public void afterBulk(long arg0, BulkRequest arg1,
-                                          BulkResponse arg2) {
-                    	
-                        List<ActionRequest> requests = arg1.requests();
-                        int toberetry = 0;
-                        int totalFailed = 0;
-                        for (BulkItemResponse item : arg2.getItems()) {
-                            if (item.isFailed()) {
-                                switch (item.getFailure().getStatus()) {
-                                    case TOO_MANY_REQUESTS:
-                                        if (totalFailed == 0) {
-                                            logger.error("too many request {}:{}",item.getIndex(),item.getFailureMessage());
-                                        } 
-                                        addFailedMsg(requests.get(item.getItemId()));
-                                        break;
-                                    case SERVICE_UNAVAILABLE:
-                                        if (toberetry == 0) {
-                                            logger.error("sevice unavaible cause {}:{}",item.getIndex(),item.getFailureMessage());
-                                        }
+            List<ActionRequest> requests = arg1.requests();
+            int toberetry = 0;
+            int totalFailed = 0;
+            for (BulkItemResponse item : arg2.getItems()) {
+              if (item.isFailed()) {
+                switch (item.getFailure().getStatus()) {
+                  case TOO_MANY_REQUESTS:
+                    if (totalFailed == 0) {
+                      logger.error("too many request {}:{}", item.getIndex(),
+                          item.getFailureMessage());
+                    }
+                    addFailedMsg(requests.get(item.getItemId()));
+                    break;
+                  case SERVICE_UNAVAILABLE:
+                    if (toberetry == 0) {
+                      logger.error("sevice unavaible cause {}:{}", item.getIndex(),
+                          item.getFailureMessage());
+                    }
 //                                        toberetry++;
-                                        addFailedMsg(requests.get(item.getItemId()));
-                                        break;
-                                    default:
-                                        if (totalFailed == 0) {
-                                            logger.error("data formate cause {}:{}:{}",item.getIndex(),((IndexRequest)requests.get(item.getItemId())).sourceAsMap(),item.getFailureMessage());
-                                        }
-                                        break;
-                                }
-                                totalFailed++;
-                            }
-                        }
-                        
+                    addFailedMsg(requests.get(item.getItemId()));
+                    break;
+                  default:
+                    if (totalFailed == 0) {
+                      logger.error("data formate cause {}:{}:{}", item.getIndex(),
+                          ((IndexRequest) requests.get(item.getItemId())).sourceAsMap(),
+                          item.getFailureMessage());
+                    }
+                    break;
+                }
+                totalFailed++;
+              }
+            }
+
 //                        addAckSeqs(requests.size());
 
-                        if (totalFailed > 0) {
-                            logger.info(totalFailed + " doc failed, "
-                                    + toberetry + " need to retry");
-                        } else {
-                            logger.debug("no failed docs");
-                        }
+            if (totalFailed > 0) {
+              logger.info(totalFailed + " doc failed, "
+                  + toberetry + " need to retry");
+            } else {
+              logger.debug("no failed docs");
+            }
 
 //                        if (toberetry > 0) {
 //                        	  logger.info("sleep " + toberetry / 2
@@ -200,56 +213,66 @@ public class Elasticsearch5 extends BaseOutput {
 //                            logger.debug("no docs need to retry");
 //                        }
 
-                    }
+          }
 
-                    @Override
-                    public void afterBulk(long arg0, BulkRequest arg1,
-                                          Throwable arg2) {
-                        logger.error("bulk got exception:", arg2);
-                        
-                        for(ActionRequest request : arg1.requests()){
-                        	addFailedMsg(request);
-                        }
-                        
+          @Override
+          public void afterBulk(long arg0, BulkRequest arg1,
+              Throwable arg2) {
+            logger.error("bulk got exception:", arg2);
+
+            for (ActionRequest request : arg1.requests()) {
+              addFailedMsg(request);
+            }
+
 //                        addAckSeqs(arg1.requests().size());
 //                        setDelayTime(1000);
-                    }
+          }
 
-                    @Override
-                    public void beforeBulk(long arg0, BulkRequest arg1) {
-                        logger.info("executionId: " + arg0);
-                        logger.info("numberOfActions: "
-                                + arg1.numberOfActions());
-                    }
-                })
-                .setBulkActions(bulkActions)
-                .setBulkSize(new ByteSizeValue(bulkSize, ByteSizeUnit.MB))
-                .setFlushInterval(TimeValue.timeValueSeconds(flushInterval))
-                .setConcurrentRequests(concurrentRequests).build();
-    }
+          @Override
+          public void beforeBulk(long arg0, BulkRequest arg1) {
+            logger.info("executionId: " + arg0);
+            logger.info("numberOfActions: "
+                + arg1.numberOfActions());
+          }
+        })
+        .setBulkActions(bulkActions)
+        .setBulkSize(new ByteSizeValue(bulkSize, ByteSizeUnit.MB))
+        .setFlushInterval(TimeValue.timeValueSeconds(flushInterval))
+        .setConcurrentRequests(concurrentRequests).build();
+  }
 
-    @SuppressWarnings("rawtypes")
-	public void emit(Map event) {
-        String _index = Formatter.format(event, index, indexTimezone);
-        String _indexType = Formatter.format(event, documentType, indexTimezone);
-        IndexRequest indexRequest;
-        if (StringUtils.isBlank(documentId)) {
-            indexRequest = new IndexRequest(_index, _indexType).source(event);
-        } else {
-            String _id = Formatter.format(event, documentId, indexTimezone);
-            if(Formatter.isFormat(_id)){
-                indexRequest = new IndexRequest(_index, _indexType).source(event);
-            }else{
-                indexRequest = new IndexRequest(_index, _indexType, _id).source(event);
-            }
-        }
-        this.bulkProcessor.add(indexRequest);
-        checkNeedWait();
+  @SuppressWarnings("rawtypes")
+  public void emit(Map event) {
+    String _index = Formatter.format(event, index, indexTimezone);
+    //判断一次index是否已经存在
+    if(!indexExists(esclient,_index)) {
+      esclient.admin().indices().prepareCreate(_index)
+          .setSettings(Settings.builder()
+              .put("index.number_of_shards", numberOfShards)
+              .put("index.number_of_replicas", numberOfReplicas)
+              .put("index.mapping.total_fields.limit", totalFields)
+          )
+          .get();
     }
-    
-    @Override
-    public void sendFailedMsg(Object msg){
-    	
+    String _indexType = Formatter.format(event, documentType, indexTimezone);
+    IndexRequest indexRequest;
+    if (StringUtils.isBlank(documentId)) {
+      indexRequest = new IndexRequest(_index, _indexType).source(event);
+    } else {
+      String _id = Formatter.format(event, documentId, indexTimezone);
+      if (Formatter.isFormat(_id)) {
+        indexRequest = new IndexRequest(_index, _indexType).source(event);
+      } else {
+        indexRequest = new IndexRequest(_index, _indexType, _id).source(event);
+      }
+    }
+    this.bulkProcessor.add(indexRequest);
+    checkNeedWait();
+  }
+
+  @Override
+  public void sendFailedMsg(Object msg) {
+
 //    	if(needDelayTime.get() >  0){//不需要sleep影响性能
 //    		try {
 //				Thread.sleep(needDelayTime.get());
@@ -257,27 +280,38 @@ public class Elasticsearch5 extends BaseOutput {
 //				logger.error("", e);
 //			}
 //    	}
-    	
-    	this.bulkProcessor.add((IndexRequest)msg);
+
+    this.bulkProcessor.add((IndexRequest) msg);
 //    	needDelayTime.set(0);
-    	checkNeedWait();
+    checkNeedWait();
+  }
+
+  public boolean indexExists(TransportClient esclient, String index){
+    IndicesExistsRequest request = new IndicesExistsRequest(index);
+    IndicesExistsResponse response = esclient.admin().indices().exists(request).actionGet();
+    if (response.isExists()) {
+      return true;
     }
-    
-    
-    @Override
-    public void release(){
-    	if(bulkProcessor!=null)bulkProcessor.close();
+    return false;
+  }
+
+
+  @Override
+  public void release() {
+    if (bulkProcessor != null) {
+      bulkProcessor.close();
     }
-    
-    public void checkNeedWait(){
-    	while(!isClusterOn.get()){//等待集群可用
-    		try {
-    			logger.warn("wait cluster avaliable...");
-				Thread.sleep(1000);//FIXME
-			} catch (InterruptedException e) {
-				logger.error("", e);
-			}
-    	}
+  }
+
+  public void checkNeedWait() {
+    while (!isClusterOn.get()) {//等待集群可用
+      try {
+        logger.warn("wait cluster avaliable...");
+        Thread.sleep(1000);//FIXME
+      } catch (InterruptedException e) {
+        logger.error("", e);
+      }
+    }
 //    	sendReqs.incrementAndGet();
 //    	if(sendReqs.get() - ackReqs.get() < maxLag){
 //    		return;
@@ -290,50 +324,51 @@ public class Elasticsearch5 extends BaseOutput {
 //				logger.error("", e);
 //			}
 //    	}
-    }
-    
+  }
+
 //    public void addAckSeqs(int num){
 //    	ackReqs.addAndGet(num);
 //    }
-    
+
 //    public void setDelayTime(long delayTime){
 //    	if(delayTime > needDelayTime.get()){
 //    		needDelayTime.set(delayTime);
 //    	}
 //    }
-    
-    class ClusterMonitor implements Runnable{
-    	
-    	private TransportClient transportClient;
-    	
-    	public ClusterMonitor(TransportClient client) {
-    		this.transportClient = client;
-		}
 
-		@Override
-		public void run() {
-			while(true) {
-	    	    try {
-	    	        logger.debug("getting es cluster health.");
-	    	        ActionFuture<ClusterHealthResponse> healthFuture = transportClient.admin().cluster().health(Requests.clusterHealthRequest());
-	    	        ClusterHealthResponse healthResponse = healthFuture.get(5, TimeUnit.SECONDS);
-	    	        logger.debug("Get num of node:{}", healthResponse.getNumberOfNodes());
-	    	        logger.debug("Get cluster health:{} ", healthResponse.getStatus());
-	    	        isClusterOn.getAndSet(true);
-	    	    } catch(Throwable t) {
-	    	        if(t instanceof NoNodeAvailableException){//集群不可用
-	    	        	logger.error("the cluster no node avaliable.");
-	    	        	isClusterOn.getAndSet(false);
-                    }else{
-	    	        	isClusterOn.getAndSet(true);
-                    }
-	    	    }
-	    	    try {
-	    	        Thread.sleep(1000);//FIXME
-	    	    } catch (InterruptedException ie) { 
-	    	    	ie.printStackTrace(); 
-	    	    }
-	    	}
-		}	
+  class ClusterMonitor implements Runnable {
+
+    private TransportClient transportClient;
+
+    public ClusterMonitor(TransportClient client) {
+      this.transportClient = client;
     }
+
+    @Override
+    public void run() {
+      while (true) {
+        try {
+          logger.debug("getting es cluster health.");
+          ActionFuture<ClusterHealthResponse> healthFuture = transportClient.admin().cluster()
+              .health(Requests.clusterHealthRequest());
+          ClusterHealthResponse healthResponse = healthFuture.get(5, TimeUnit.SECONDS);
+          logger.debug("Get num of node:{}", healthResponse.getNumberOfNodes());
+          logger.debug("Get cluster health:{} ", healthResponse.getStatus());
+          isClusterOn.getAndSet(true);
+        } catch (Throwable t) {
+          if (t instanceof NoNodeAvailableException) {//集群不可用
+            logger.error("the cluster no node avaliable.");
+            isClusterOn.getAndSet(false);
+          } else {
+            isClusterOn.getAndSet(true);
+          }
+        }
+        try {
+          Thread.sleep(1000);//FIXME
+        } catch (InterruptedException ie) {
+          ie.printStackTrace();
+        }
+      }
+    }
+  }
 }
