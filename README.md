@@ -48,6 +48,8 @@
       numberOfReplicas:默认 1 最大副本数
       
       totalFields:默认 1000 最大字段数
+      
+      condition: 默认Null 只支持"==" 例如"[type] == testType" type为已有字段
 # Kafka:
 
     encoding:默认utf-8
