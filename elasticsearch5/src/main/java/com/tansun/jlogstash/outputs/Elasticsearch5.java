@@ -246,6 +246,12 @@ public class Elasticsearch5 extends BaseOutput {
 
   @SuppressWarnings("rawtypes")
   public void emit(Map event) {
+    //根据condition 判断是否执行grok
+    if(StringUtils.isEmpty(this.condition)) {
+      if(!ConditionUtils.isTrue(event,this.condition)) {
+        return;
+      }
+    }
     String _index = Formatter.format(event, index, indexTimezone);
     //判断一次index是否已经存在
     if(!indexExists(esclient,_index)) {
@@ -256,9 +262,6 @@ public class Elasticsearch5 extends BaseOutput {
               .put("index.mapping.total_fields.limit", totalFields)
           )
           .get();
-    }
-    if(!ConditionUtils.isTrue(event, this.condition)) {
-      return;
     }
     String _indexType = Formatter.format(event, documentType, indexTimezone);
     IndexRequest indexRequest;
