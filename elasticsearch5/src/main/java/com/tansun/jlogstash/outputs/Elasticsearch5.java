@@ -19,6 +19,7 @@ package com.tansun.jlogstash.outputs;
 
 import com.tansun.jlogstash.annotation.Required;
 import com.tansun.jlogstash.render.Formatter;
+import com.tansun.jlogstash.utils.ConditionUtils;
 
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -101,6 +102,8 @@ public class Elasticsearch5 extends BaseOutput {
   private static int numberOfReplicas = 1;
 
   private static int totalFields = 1000;
+
+  private static String condition;
 
 //    private AtomicLong sendReqs = new AtomicLong(0);
 //    
@@ -253,6 +256,9 @@ public class Elasticsearch5 extends BaseOutput {
               .put("index.mapping.total_fields.limit", totalFields)
           )
           .get();
+    }
+    if(!ConditionUtils.isTrue(event, this.condition)) {
+      return;
     }
     String _indexType = Formatter.format(event, documentType, indexTimezone);
     IndexRequest indexRequest;
