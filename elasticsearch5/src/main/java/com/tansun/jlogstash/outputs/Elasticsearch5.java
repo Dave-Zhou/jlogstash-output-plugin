@@ -247,7 +247,7 @@ public class Elasticsearch5 extends BaseOutput {
   @SuppressWarnings("rawtypes")
   public void emit(Map event) {
     //根据condition 判断是否执行grok
-    if(StringUtils.isEmpty(this.condition)) {
+    if(!StringUtils.isEmpty(this.condition)) {
       if(!ConditionUtils.isTrue(event,this.condition)) {
         return;
       }
