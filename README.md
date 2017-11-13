@@ -49,7 +49,8 @@
       
       totalFields:默认 1000 最大字段数
       
-      condition: 默认Null 只支持"==" 例如"[type] == testType" type为已有字段
+      condition: 默认Null 只支持"==、exist" 例如"[type] == testType、[type] exist" type为已有字段
+                          
 # Kafka:
 
     encoding:默认utf-8
@@ -160,3 +161,17 @@
   
   schema：写入hadoop的数据格式（["name:varchar"]）
   
+ 
+ #rocketmq
+ 
+ topic: 必填
+ 
+ tags:可选
+ 
+ NamesrvAddr:必填
+ 
+ ProducerGroup:必填
+ 
+ TopicQueueNums:可选
+ 
+ condition: 默认Null 只支持"==、exist" 例如"[type] == testType、[type] exist" type为已有字段
