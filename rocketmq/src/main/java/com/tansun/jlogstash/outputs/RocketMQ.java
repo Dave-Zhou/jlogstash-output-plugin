@@ -17,31 +17,32 @@ import org.slf4j.LoggerFactory;
 /**
  * Created by Dave on 2017/11/13.
  *
- * @version 1.0 2017/11/13
- * @autor zxd
+ * version 1.0 2017/11/13
+ * autor zxd
  */
 public class RocketMQ extends BaseOutput {
 
   private Logger logger = LoggerFactory.getLogger(RocketMQ.class);
 
   //指定生产主题
-  private String Topic;
+  private static String topic;
 
-  private String tags;
+  private static String tags;
 
   //指定MQ的地址格式10.1.54.121:9876;10.1.54.122:9876
-  private String NamesrvAddr;
+  private static String namesrvAddr;
 
   //producer group name
-  private String ProducerGroup;
+  private static String producerGroup;
 
   //QueueNums
-  private int TopicQueueNums;
+  private static int topicQueueNums;
 
   //condition
-  private String condition;
+  private static String condition;
 
   private DefaultMQProducer defaultMQProducer;
+
   public RocketMQ(Map config) {
     super(config);
   }
@@ -49,9 +50,12 @@ public class RocketMQ extends BaseOutput {
   @Override
   public void prepare() {
     try {
-      defaultMQProducer.setNamesrvAddr(NamesrvAddr);
-      if(!StringUtils.isEmpty(TopicQueueNums + "")) {
-        defaultMQProducer.setDefaultTopicQueueNums(TopicQueueNums);
+      defaultMQProducer = new DefaultMQProducer();
+      defaultMQProducer.setProducerGroup(producerGroup);
+      defaultMQProducer.setInstanceName(Thread.currentThread().getId()+toString());
+      defaultMQProducer.setNamesrvAddr(namesrvAddr);
+      if(!StringUtils.isEmpty(topicQueueNums + "")) {
+        defaultMQProducer.setDefaultTopicQueueNums(topicQueueNums);
       }
       defaultMQProducer.start();
     } catch (MQClientException e) {
@@ -69,7 +73,7 @@ public class RocketMQ extends BaseOutput {
     }
     try {
       Message msg = new Message();
-      msg.setTopic(Topic);
+      msg.setTopic(topic);
       if(!StringUtils.isEmpty(tags)) {
         msg.setTags(tags);
       }

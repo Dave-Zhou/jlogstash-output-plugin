@@ -123,7 +123,7 @@
 				</exclusion>
 			</exclusions>
 		</dependency>
-		
+
 		<dependency>
 			<groupId>com.tansun.jlogstash</groupId>
 			<artifactId>jlogstash</artifactId>

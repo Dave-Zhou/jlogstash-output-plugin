@@ -260,8 +260,7 @@ public class Elasticsearch5 extends BaseOutput {
               .put("index.number_of_shards", numberOfShards)
               .put("index.number_of_replicas", numberOfReplicas)
               .put("index.mapping.total_fields.limit", totalFields)
-          )
-          .get();
+          ).get();
     }
     String _indexType = Formatter.format(event, documentType, indexTimezone);
     IndexRequest indexRequest;
