@@ -106,9 +106,9 @@ public class Elasticsearch5 extends BaseOutput {
   private static String condition;
 
 //    private AtomicLong sendReqs = new AtomicLong(0);
-//    
+//
 //    private AtomicLong ackReqs = new AtomicLong(0);
-//   
+//
 //    private int maxLag = bulkActions;
 
 //    private AtomicLong needDelayTime = new AtomicLong(0l);
