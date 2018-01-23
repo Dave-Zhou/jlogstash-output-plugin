@@ -23,7 +23,7 @@ public class TestRocketMQ {
     mqPushConsumer.setNamesrvAddr("127.0.0.1:9876");
     mqPushConsumer.setConsumerGroup("testConsumer");
     mqPushConsumer.setVipChannelEnabled(false);
-    mqPushConsumer.subscribe("JIGTopic",null);
+    mqPushConsumer.subscribe("JIGTopic","");
     mqPushConsumer.registerMessageListener(new MessageListenerOrderly() {
       @Override
       public ConsumeOrderlyStatus consumeMessage(List<MessageExt> list,
